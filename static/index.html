@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biometric Authentication</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #444;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .fingerprint-icon {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .user-info p {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="fingerprint-icon">🔐</div>
+        <h1>Biometric Login</h1>
+        <p class="subtitle">Secure login with Touch ID</p>
+        
+        <div id="message-container"></div>
+        
+        <!-- Registration Section -->
+        <div id="registration-section" class="section">
+            <h2>Register New Account</h2>
+            <input type="email" id="register-email" placeholder="Email address" />
+            <input type="text" id="register-username" placeholder="Your name" />
+            <button onclick="register()">Register with Touch ID</button>
+        </div>
+        
+        <!-- Login Section -->
+        <div id="login-section" class="section">
+            <h2>Login</h2>
+            <input type="email" id="login-email" placeholder="Email address" />
+            <button onclick="login()">Login with Touch ID</button>
+        </div>
+        
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="section hidden">
+            <h2>Welcome!</h2>
+            <div class="user-info" id="user-info"></div>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        
+        // Helper functions
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            container.innerHTML = `<div class="message ${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 6000);
+        }
+        
+        function base64urlToBuffer(base64url) {
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64);
+            const buffer = new ArrayBuffer(binary.length);
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return buffer;
+        }
+        
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+        
+        // Registration
+        async function register() {
+            const email = document.getElementById('register-email').value;
+            const username = document.getElementById('register-username').value;
+            
+            if (!email) {
+                showMessage('Please enter your email', 'error');
+                return;
+            }
+            
+            try {
+                // Get registration options from server
+                const optionsResponse = await fetch(`${API_URL}/register-challenge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, username: username || email })
+                });
+                
+                if (!optionsResponse.ok) {
+                    const error = await optionsResponse.json();
+                    throw new Error(error.error || 'Registration failed');
+                }
+                
+                const options = await optionsResponse.json();
+                
+                // Convert base64url to ArrayBuffer
+                options.challenge = base64urlToBuffer(options.challenge);
+                options.user.id = base64urlToBuffer(options.user.id);
+                
+                // Create credential
+                const credential = await navigator.credentials.create({
+                    publicKey: options
+                });
+                
+                // Prepare credential for server
+                const credentialJSON = {
+                    id: credential.id,
+                    rawId: bufferToBase64url(credential.rawId),
+                    response: {
+                        clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+                        attestationObject: bufferToBase64url(credential.response.attestationObject)
+                    },
+                    type: credential.type
+                };
+                
+                // Send to server for verification
+                const verifyResponse = await fetch(`${API_URL}/register-verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(credentialJSON)
+                });
+                
+                if (!verifyResponse.ok) {
+                    const error = await verifyResponse.json();
+                    throw new Error(error.error || 'Verification failed');
+                }
+                
+                const result = await verifyResponse.json();
+                showMessage('Registration successful! You can now login.', 'success');
+                
+                // Clear registration fields
+                document.getElementById('register-email').value = '';
+                document.getElementById('register-username').value = '';
+                
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessage(error.message || 'Registration failed', 'error');
+            }
+        }
+        
+        // Login
+        async function login() {
+            const email = document.getElementById('login-email').value;
+            
+            if (!email) {
+                showMessage('Please enter your email', 'error');
+                return;
+            }
+            
+            try {
+                // Get authentication options from server
+                const optionsResponse = await fetch(`${API_URL}/login-challenge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email })
+                });
+                
+                if (!optionsResponse.ok) {
+                    const error = await optionsResponse.json();
+                    throw new Error(error.error || 'Login failed');
+                }
+                
+                const options = await optionsResponse.json();
+                
+                // Convert base64url to ArrayBuffer
+                options.challenge = base64urlToBuffer(options.challenge);
+                options.allowCredentials = options.allowCredentials.map(cred => ({
+                    ...cred,
+                    id: base64urlToBuffer(cred.id)
+                }));
+                
+                // Get assertion
+                const assertion = await navigator.credentials.get({
+                    publicKey: options
+                });
+                
+                // Prepare assertion for server
+                const assertionJSON = {
+                    id: assertion.id,
+                    rawId: bufferToBase64url(assertion.rawId),
+                    response: {
+                        clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+                        authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                        signature: bufferToBase64url(assertion.response.signature),
+                        userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null
+                    },
+                    type: assertion.type
+                };
+                
+                // Send to server for verification
+                const verifyResponse = await fetch(`${API_URL}/login-verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(assertionJSON)
+                });
+                
+                if (!verifyResponse.ok) {
+                    const error = await verifyResponse.json();
+                    throw new Error(error.error || 'Login failed');
+                }
+                
+                const result = await verifyResponse.json();
+                showMessage('Login successful!', 'success');
+                
+                // Show dashboard
+                showDashboard(result.user);
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage(error.message || 'Login failed', 'error');
+            }
+        }
+        
+        // Show dashboard
+        function showDashboard(user) {
+            document.getElementById('registration-section').classList.add('hidden');
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            
+            document.getElementById('user-info').innerHTML = `
+                <p><strong>Email:</strong> ${user.email}</p>
+                <p><strong>Name:</strong> ${user.username}</p>
+            `;
+        }
+        
+        // Logout
+        async function logout() {
+            try {
+                await fetch(`${API_URL}/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                document.getElementById('registration-section').classList.remove('hidden');
+                document.getElementById('login-section').classList.remove('hidden');
+                document.getElementById('dashboard-section').classList.add('hidden');
+                
+                showMessage('Logged out successfully', 'success');
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+        
+        // Check if already logged in on page load
+        async function checkSession() {
+            try {
+                const response = await fetch(`${API_URL}/user`, {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const user = await response.json();
+                    showDashboard(user);
+                }
+            } catch (error) {
+                // Not logged in, show login/registration
+            }
+        }
+        
+        // Check session on load
+        checkSession();
+    </script>
+</body>
+</html>
